@@ -47,9 +47,6 @@ object Importer {
     def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
   }
   
-  private def stripCertAndSig(mr: Tables.MessagesRow) =
-    mr.copy(certificate = None, signature = None)
-  
   def apply(dburl: String, output_dir: String, limit: Int = 0) {
     import JSONImplicits._
     
