@@ -1,4 +1,4 @@
-package org.freevariable.copricapo.schema
+package com.freevariable.copricapo.schema
 // AUTO-GENERATED Slick data model
 /** Stand-alone Slick data model for immediate use */
 object Tables extends {
