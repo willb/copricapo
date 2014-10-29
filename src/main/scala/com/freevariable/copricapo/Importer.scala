@@ -31,8 +31,6 @@ object Importer {
       tupleIfPresent("source_name", m.sourceName) ~
       tupleIfPresent("source_version", m.sourceVersion)
     }
-    
-    
   }
   
   object parseJSON {
@@ -49,4 +47,21 @@ object Importer {
     def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
   }
   
+  def apply(dburl: String, output_dir: String, limit: Int = 0) {
+    import JSONImplicits._
+    
+    new java.io.File(output_dir).mkdir()
+    
+    Database.forURL(dburl, driver="org.postgresql.Driver") withSession { implicit session =>
+      val messages = for { row <- Tables.Messages } yield(row)
+      (if (limit == 0) messages else messages.take(limit)) foreach { m =>
+        val id = m.id
+        val outputFile = s"$output_dir/$id.json"
+        println(s"rendering to $outputFile")
+        val pw = new java.io.PrintWriter(new java.io.File(outputFile))
+        pw.println(renderJSON(m))
+        pw.close
+      }
+    }
+  }
 }
