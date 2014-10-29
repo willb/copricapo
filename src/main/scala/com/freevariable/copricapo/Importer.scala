@@ -47,13 +47,17 @@ object Importer {
     def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
   }
   
+  private def stripCertAndSig(mr: Tables.MessagesRow) =
+    mr.copy(certificate = None, signature = None)
+  
   def apply(dburl: String, output_dir: String, limit: Int = 0) {
     import JSONImplicits._
     
     new java.io.File(output_dir).mkdir()
     
     Database.forURL(dburl, driver="org.postgresql.Driver") withSession { implicit session =>
-      val messages = for { row <- Tables.Messages } yield(row)
+      val messages = TableQuery[Tables.Messages].elements
+      
       (if (limit == 0) messages else messages.take(limit)) foreach { m =>
         val id = m.id
         val outputFile = s"$output_dir/$id.json"
