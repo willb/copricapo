@@ -18,6 +18,9 @@ object CopricapoBuild extends Build {
         "org.postgresql" % "postgresql" % "9.3-1102-jdbc41",
         "org.slf4j" % "slf4j-nop" % "1.6.4",
         "org.scalatest" %% "scalatest" % "2.0" % "test",
+        "org.json4s" %% "json4s-jackson" % "3.2.11",
+        "org.json4s" %% "json4s-ext" % "3.2.11",
+        "joda-time" % "joda-time" % "2.5",
         "org.scala-lang" % "scala-reflect" % SCALA_VERSION
       )
     )

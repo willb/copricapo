@@ -7,76 +7,46 @@ import scala.slick.driver.PostgresDriver.simple._
 import scala.reflect.runtime.universe
 import scala.slick.jdbc.StaticQuery.interpolation
 
+import com.freevariable.copricapo.schema._
+
 object Importer {
-  /* Table "public.messages"
-   *       Column     |            Type             |                       Modifiers                       
-   *  ----------------+-----------------------------+-------------------------------------------------------
-   *   id             | integer                     | not null default nextval('messages_id_seq'::regclass)
-   *   i              | integer                     | not null
-   *   timestamp      | timestamp without time zone | not null
-   *   certificate    | text                        | 
-   *   signature      | text                        | 
-   *   topic          | text                        | 
-   *   _msg           | text                        | not null
-   *   category       | text                        | 
-   *   source_name    | text                        | 
-   *   source_version | text                        | 
-   *   msg_id         | text                        | 
-   * Indexes:
-   *     "messages_pkey" PRIMARY KEY, btree (id)
-   *     "messages_msg_id_key" UNIQUE CONSTRAINT, btree (msg_id)
-   *     "index_msg_timestamp" btree ("timestamp")
-   * Referenced by:
-   *     TABLE "package_messages" CONSTRAINT "package_messages_msg_fkey" FOREIGN KEY (msg) REFERENCES messages(id)
-   *     TABLE "user_messages" CONSTRAINT "user_messages_msg_fkey" FOREIGN KEY (msg) REFERENCES messages(id)
-   */
-  
-  /* Table "public.package_messages"
-   *   Column  |  Type   | Modifiers 
-   *  ---------+---------+-----------
-   *   package | text    | 
-   *   msg     | integer | 
-   * Foreign-key constraints:
-   *   "package_messages_msg_fkey" FOREIGN KEY (msg) REFERENCES messages(id)
-   *   "package_messages_package_fkey" FOREIGN KEY (package) REFERENCES package(name)
-   */
-
-  /* Table "public.user_messages"
-   *   Column  |  Type   | Modifiers 
-   * ----------+---------+-----------
-   *  username | text    | 
-   *  msg      | integer | 
-   * Foreign-key constraints:
-   *     "user_messages_msg_fkey" FOREIGN KEY (msg) REFERENCES messages(id)
-   *     "user_messages_username_fkey" FOREIGN KEY (username) REFERENCES "user"(name)
-   */
-
-  /* Table "public.package"
-   *  Column | Type | Modifiers 
-   * --------+------+-----------
-   *  name   | text | not null
-   * Indexes:
-   *     "package_pkey" PRIMARY KEY, btree (name)
-   * Referenced by:
-   *     TABLE "package_messages" CONSTRAINT "package_messages_package_fkey" FOREIGN KEY (package) REFERENCES package(name)
-   */
-
-  /* Table "public.user"
-   *  Column | Type | Modifiers 
-   * --------+------+-----------
-   *  name   | text | not null
-   * Indexes:
-   *     "user_pkey" PRIMARY KEY, btree (name)
-   * Referenced by:
-   *     TABLE "user_messages" CONSTRAINT "user_messages_username_fkey" FOREIGN KEY (username) REFERENCES "user"(name)
-   */
-  
-  def sandbox(q: String) {
-    // val backend = new SlickBackend(PostgresDriver, AnnotationMapper)
-    //
-    // Database.forURL("jdbc:postgresql:datanommer", driver = "org.postgresql.Driver") withSession { implicit session:Session =>
-    //   // insert using SQL (currently not supported by direct embedding)
-    //   import slick.jdbc.StaticQuery.interpolation
-    // }
+  object JSONImplicits {
+    import org.json4s._
+    import org.json4s.ext._
+    import org.json4s.JsonDSL._
+    import org.joda.time.DateTime
+    
+    private def tupleIfPresent[T](name: String, v: Option[T])
+      (implicit cnv: T => JValue): JObject =
+      v.map(some => (name -> some) ~ JObject()) getOrElse JObject()
+    
+    implicit def message2json(m: Tables.MessagesRow) = {
+      ("id" -> m.id) ~
+      ("i" -> m.i) ~
+      ("timestamp" -> (new DateTime(m.timestamp.getTime()).toString)) ~
+      tupleIfPresent("topic", m.topic) ~
+      tupleIfPresent("category", m.category) ~
+      ("msg" -> parseJSON(m._Msg)) ~
+      tupleIfPresent("msg_id", m.msgId) ~
+      tupleIfPresent("source_name", m.sourceName) ~
+      tupleIfPresent("source_version", m.sourceVersion)
+    }
+    
+    
   }
+  
+  object parseJSON {
+    import org.json4s._
+    import org.json4s.jackson.JsonMethods._
+
+    def apply(s: String) = parse(s)
+  }
+  
+  object renderJSON {
+    import org.json4s._
+    import org.json4s.jackson.JsonMethods._
+    
+    def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
+  }
+  
 }
