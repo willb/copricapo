@@ -56,7 +56,8 @@ trait Tables {
   }
   /** Table description of table messages. Objects of this class serve as prototypes for rows in queries. */
   class Messages(tag: Tag) extends Table[MessagesRow](tag, "messages") {
-    def * = (id, i, timestamp, certificate, signature, topic, _Msg, category, sourceName, sourceVersion, msgId) <> (MessagesRow.tupled, MessagesRow.unapply)
+//    def * = (id, i, timestamp, certificate, signature, topic, _Msg, category, sourceName, sourceVersion, msgId) <> (MessagesRow.tupled, MessagesRow.unapply)
+    def * = (id, i, timestamp, None, None, topic, _Msg, category, sourceName, sourceVersion, msgId) <> (MessagesRow.tupled, MessagesRow.unapply)
     /** Maps whole row to an option. Useful for outer joins. */
     def ? = (id.?, i.?, timestamp.?, certificate, signature, topic, _Msg.?, category, sourceName, sourceVersion, msgId).shaped.<>({r=>import r._; _1.map(_=> MessagesRow.tupled((_1.get, _2.get, _3.get, _4, _5, _6, _7.get, _8, _9, _10, _11)))}, (_:Any) =>  throw new Exception("Inserting into ? projection not supported."))
     
