@@ -39,7 +39,7 @@ trait MessageTransforming {
   
   def transformObject(record: JValue) = {
     record transformField {
-      case JField("msg", msg) => ("msg", renameBranches(msg))
+      case JField("_msg", msg) => ("_msg", renameBranches(msg))
     }
   }
 }
@@ -101,9 +101,9 @@ object ObjectDbImporter extends MessageTransforming with JsonConveniences {
       pw.println(record)
       
       if (objectsLeft == 0) {
-        pw.close ; this.copy(pw=FoldState.writerForFile(outputDir, index + 1), index = index+1, objectsLeft=objectsPerFile)
+        pw.close ; this.copy(pw = FoldState.writerForFile(outputDir, index + 1), index = index+1, objectsLeft = objectsPerFile)
       } else {
-        this.copy(objectsLeft=objectsPerFile - 1)
+        this.copy(objectsLeft=objectsLeft - 1)
       }
     }
   }
@@ -122,14 +122,16 @@ object ObjectDbImporter extends MessageTransforming with JsonConveniences {
   def apply(dburl: String, output_dir: String, limit: Int = 0, recordsPerFile: Int = 10000) {
     val fs = FoldState.initial(output_dir, recordsPerFile)
     Database.forURL(dburl, driver="org.postgresql.Driver") withDynSession {
-      Q.queryNA[String]("""
+      val messages = Q.queryNA[String]("""
         select cast(row_to_json(data) as varchar) as jobject 
         from (
           select id, i, timestamp, topic, cast(_msg as json), 
                  category, source_name, source_version, msg_id
           from messages) 
-        as data""").elements.foldLeft(fs) { (fs, objString) =>
-          fs.update(renderJSON(transformObject(parseJSON(objString))))
+        as data""").elements
+        
+      (if (limit == 0) messages else messages.take(limit)).foldLeft(fs) { (fs, objString) =>
+        fs.update(renderJSON(transformObject(parseJSON(objString))))
       }
     }
   }
