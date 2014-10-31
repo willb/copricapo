@@ -9,7 +9,42 @@ import scala.slick.jdbc.StaticQuery.interpolation
 
 import com.freevariable.copricapo.schema._
 
-object Importer {
+trait JsonConveniences {
+  object parseJSON {
+    import org.json4s._
+    import org.json4s.jackson.JsonMethods._
+
+    def apply(s: String) = parse(s)
+  }
+  
+  object renderJSON {
+    import org.json4s._
+    import org.json4s.jackson.JsonMethods._
+    
+    def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
+  }
+}
+
+trait MessageTransforming {
+  import org.json4s._
+  import org.json4s.JsonDSL._
+  import org.json4s.jackson.JsonMethods._
+  
+  def renameBranches(msg: JValue) = {
+    msg transformField {
+      case JField("branches", v @ JArray(JString(_)::_)) => ("pkg_branches", v)
+      case JField("branches", v @ JArray(JObject(_)::_)) => ("git_branches", v)
+    }
+  }
+  
+  def transformObject(record: JValue) = {
+    record transformField {
+      case JField("msg", msg) => ("msg", renameBranches(msg))
+    }
+  }
+}
+
+object QueryDbImporter extends MessageTransforming with JsonConveniences {
   object JSONImplicits {
     import org.json4s._
     import org.json4s.ext._
@@ -26,25 +61,11 @@ object Importer {
       ("timestamp" -> (new DateTime(m.timestamp.getTime()).toString)) ~
       tupleIfPresent("topic", m.topic) ~
       tupleIfPresent("category", m.category) ~
-      ("msg" -> parseJSON(m._Msg)) ~
+      ("msg" -> renameBranches(parseJSON(m._Msg))) ~
       tupleIfPresent("msg_id", m.msgId) ~
       tupleIfPresent("source_name", m.sourceName) ~
       tupleIfPresent("source_version", m.sourceVersion)
     }
-  }
-  
-  object parseJSON {
-    import org.json4s._
-    import org.json4s.jackson.JsonMethods._
-
-    def apply(s: String) = parse(s)
-  }
-  
-  object renderJSON {
-    import org.json4s._
-    import org.json4s.jackson.JsonMethods._
-    
-    def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
   }
   
   def apply(dburl: String, output_dir: String, limit: Int = 0) {
@@ -62,6 +83,53 @@ object Importer {
         val pw = new java.io.PrintWriter(new java.io.File(outputFile))
         pw.println(renderJSON(m))
         pw.close
+      }
+    }
+  }
+}
+
+object ObjectDbImporter extends MessageTransforming with JsonConveniences {  
+  import scala.slick.driver.JdbcDriver.backend.Database
+  import Database.dynamicSession
+  import scala.slick.jdbc.{GetResult, StaticQuery => Q}
+  import Q.interpolation
+  
+  case class JsonString(jobject: String) {}
+  
+  case class FoldState(pw: java.io.PrintWriter, index: Int, objectsLeft: Int, objectsPerFile: Int, outputDir: String) {
+    def update(record: String) = {
+      pw.println(record)
+      
+      if (objectsLeft == 0) {
+        pw.close ; this.copy(pw=FoldState.writerForFile(outputDir, index + 1), index = index+1, objectsLeft=objectsPerFile)
+      } else {
+        this.copy(objectsLeft=objectsPerFile - 1)
+      }
+    }
+  }
+  
+  object FoldState {
+    def initial(outputDir: String, objectsPerFile: Int) = {
+      FoldState(writerForFile(outputDir, 0), 0, objectsPerFile, objectsPerFile, outputDir)
+    }
+    
+    def writerForFile(outputDir: String, index: Int) = {
+      val outputFile = "%s/%020d.json".format(outputDir, index)
+      new java.io.PrintWriter(new java.io.File(outputFile))
+    }
+  }
+  
+  def apply(dburl: String, output_dir: String, limit: Int = 0, recordsPerFile: Int = 10000) {
+    val fs = FoldState.initial(output_dir, recordsPerFile)
+    Database.forURL(dburl, driver="org.postgresql.Driver") withDynSession {
+      Q.queryNA[String]("""
+        select cast(row_to_json(data) as varchar) as jobject 
+        from (
+          select id, i, timestamp, topic, cast(_msg as json), 
+                 category, source_name, source_version, msg_id
+          from messages) 
+        as data""").elements.foldLeft(fs) { (fs, objString) =>
+          fs.update(renderJSON(transformObject(parseJSON(objString))))
       }
     }
   }
