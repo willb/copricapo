@@ -10,12 +10,13 @@ import scala.slick.jdbc.StaticQuery.interpolation
 import com.freevariable.copricapo.schema._
 
 object Importer {
+  import org.json4s._
+  import org.json4s.ext._
+  import org.json4s.JsonDSL._
+  import org.joda.time.DateTime
+  import org.json4s.jackson.JsonMethods.{parse, render, compact}
+  
   object JSONImplicits {
-    import org.json4s._
-    import org.json4s.ext._
-    import org.json4s.JsonDSL._
-    import org.joda.time.DateTime
-    
     private def tupleIfPresent[T](name: String, v: Option[T])
       (implicit cnv: T => JValue): JObject =
       v.map(some => (name -> some) ~ JObject()) getOrElse JObject()
@@ -33,19 +34,8 @@ object Importer {
     }
   }
   
-  object parseJSON {
-    import org.json4s._
-    import org.json4s.jackson.JsonMethods._
-
-    def apply(s: String) = parse(s)
-  }
-  
-  object renderJSON {
-    import org.json4s._
-    import org.json4s.jackson.JsonMethods._
-    
-    def apply[T](v: T)(implicit conversion: T => JValue) = compact(render(v))
-  }
+  def parseJSON(s: String) = parse(s)
+  def renderJSON[T](v: T)(implicit c: T => JValue) = compact(render(v))
   
   def apply(dburl: String, output_dir: String, limit: Int = 0) {
     import JSONImplicits._
@@ -53,9 +43,9 @@ object Importer {
     new java.io.File(output_dir).mkdir()
     
     Database.forURL(dburl, driver="org.postgresql.Driver") withSession { implicit session =>
-      val messages = TableQuery[Tables.Messages].elements
+      val messages = TableQuery[Tables.Messages]
       
-      (if (limit == 0) messages else messages.take(limit)) foreach { m =>
+      (if (limit == 0) messages else messages.take(limit)).elements foreach { m =>
         val id = m.id
         val outputFile = s"$output_dir/$id.json"
         println(s"rendering to $outputFile")
